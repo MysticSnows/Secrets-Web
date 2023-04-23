@@ -1,11 +1,13 @@
 require('dotenv').config();
+// const md5 = require('md5');   // usage: md5(password)
+const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const express = require('express');
-const ejs = require('ejs');
 const bodyParser = require('body-parser');
-const encrypt = require('mongoose-encryption');
+const ejs = require('ejs');
 const app = express();
 
+const saltRounds = 10;
 // export module
 const User = require(__dirname + "/custom_modules/userModel.js");
 
@@ -27,6 +29,7 @@ app.get("/", function(req, res){
   res.render("home");
 });
 
+// Login Route
 app.route("/login")
 .get(function(req, res){
   res.render("login");
@@ -36,7 +39,7 @@ app.route("/login")
     const username = req.body.username;
     const pass = req.body.password;
     const user = await User.findOne({email: username});
-    if(pass.length != 0 && pass === user.password){
+    if(pass.length != 0 && bcrypt.compareSync(pass, user.password)){
       res.render("secrets");
     } else {
       res.send("Username and Password do not match");
@@ -46,17 +49,24 @@ app.route("/login")
   }
 })
 
+// Register Route
 app.route("/register")
 .get(function(req, res){
   res.render('register');
 })
-.post(async function(req, res){
-  await User.create({
-    email: req.body.username,
-    password: req.body.password
-  })
-  .then(async () => res.render('secrets'))
-  .catch((err) => console.log(`Error in Registration: ${err}`));
+.post(function(req, res){
+  bcrypt.hash(req.body.password, saltRounds, async function(err, hash) {
+    await User.create({
+      email: req.body.username,
+      password: hash
+    })
+    .then(async () => res.render('secrets'))
+    .catch((err) => console.log(`Error in Registration: ${err}`));
+
+    if(err){
+      console.log(err);
+    }
+  });
 });
 
 
