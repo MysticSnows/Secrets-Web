@@ -1,76 +1,148 @@
-require('dotenv').config();
-// const md5 = require('md5');   // usage: md5(password)
-const bcrypt = require('bcrypt');
-const mongoose = require('mongoose');
-const express = require('express');
-const bodyParser = require('body-parser');
-const ejs = require('ejs');
-const app = express();
-
+require('dotenv').config()
+const express = require('express')
+const ejs = require('ejs')
+const bodyParser = require('body-parser')
+const mongoose = require('mongoose')
+const bcrypt = require('bcrypt')
 const saltRounds = 10;
-// export module
+const session = require('express-session')
+const passport = require('passport')
+const LocalStrategy = require("passport-local").Strategy;
+
+//init app & middleware
+const app = express()
+app.use(express.static('public'))
+app.set('view engine', 'ejs')
+app.use(bodyParser.urlencoded({ extended: true }))
 const User = require(__dirname + "/custom_modules/userModel.js");
 
-app.use(express.static("public"));
-app.set('view engine', 'ejs');
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(session({
+	secret: process.env.SECRET_KEY,
+	resave: false,
+	saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
-const connectDB = async ()=> {
-  const conn = await mongoose.connect("mongodb://127.0.0.1:27017/userDB")
-  
-  console.log(`Successfully connected: ${conn.connection.host} at DB: ${conn.connection.name}`);
-}
+//Connect to Database
+const connectDB = async () => {
+	const conn = await mongoose.connect("mongodb://127.0.0.1:27017/userDB");
+	console.log(`Successfully connected: ${conn.connection.host} at DB: ${conn.connection.name}`);
+};
 connectDB().catch((err) => {
-  console.log(`Error: ${err}`);
+	console.log(`Error: ${err}`);
 });
 
-
-app.get("/", function(req, res){
-  res.render("home");
+//configure passport local strategy
+passport.use(new LocalStrategy(
+	function (username, password, done) {
+		User.findOne({ username: username })
+			.then((founduser) => {
+				if (!founduser) { return done(null, false); }
+				bcrypt.compare(password, founduser.password, (err, result) => {
+					if (err) { return done(err); }
+					if (result) { return done(null, founduser); }
+					return done(null, false);
+				});
+			})
+			.catch((err) => {
+				return done(err);
+			})
+	}
+));
+// Serialize
+passport.serializeUser((user, done) => {
+	done(null, user.id);
+});
+// Deserialize
+passport.deserializeUser((id, done) => {
+	User.findById(id)
+		.then((founduser) => {
+			done(null, founduser);
+		})
+		.catch(err => {
+			done(err);
+		});
 });
 
-// Login Route
-app.route("/login")
-.get(function(req, res){
-  res.render("login");
+//ROUTES----------------------------------------------------------------------------------------
+//HOME
+app.route('/')
+	.get((req, res) => {
+		res.render('home');
+	})
+
+//REGISTER
+app.route('/register')
+	.get((req, res) => {
+		res.render('register')
+	})
+	.post((req, res) => {
+		bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
+			if (err) {
+				console.log(err);
+			} else {
+				const newUser = new User({
+					username: req.body.username,
+					password: hash
+				})
+				newUser.save()
+					.then(() => {
+						passport.authenticate('local', {
+							successRedirect: '/secrets',
+							failureRedirect: '/login'
+						})(req, res);
+					})
+			}
+		})
+	})
+
+//LOGIN
+app.route('/login')
+	.get((req, res) => {
+		res.render('login');
+	})
+	.post((req, res) => {
+		const user = new User({
+			username: req.body.useername,
+			password: req.body.password
+		})
+		req.login(user, (err) => {
+			if (err) {
+				console.log(err);
+			} else {
+				passport.authenticate('local', {
+					successRedirect: '/secrets'
+				})(req, res);
+			}
+		})
+	})
+
+//SECRETS
+app.route('/secrets')
+	.get((req, res) => {
+		// To prevent back button redirect after log out
+		res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+		if (req.isAuthenticated()) {
+			res.render("secrets");
+		} else {
+			res.redirect("/login");
+		}
+	})
+
+//LOGOUT
+app.route('/logout')
+	.get((req, res) => {
+		req.logOut((err) => {
+			if (err) {
+				console.log(err);
+			} else {
+				res.redirect('/');
+			}
+		});
+	});
+
+//listen to port 3000
+app.listen(3000, () => {
+	console.log('app listening on port 3000')
 })
-.post(async function(req, res){
-  try{
-    const username = req.body.username;
-    const pass = req.body.password;
-    const user = await User.findOne({email: username});
-    if(pass.length != 0 && bcrypt.compareSync(pass, user.password)){
-      res.render("secrets");
-    } else {
-      res.send("Username and Password do not match");
-    }
-  } catch(err){
-    res.send("Error: " + err);
-  }
-})
-
-// Register Route
-app.route("/register")
-.get(function(req, res){
-  res.render('register');
-})
-.post(function(req, res){
-  bcrypt.hash(req.body.password, saltRounds, async function(err, hash) {
-    await User.create({
-      email: req.body.username,
-      password: hash
-    })
-    .then(async () => res.render('secrets'))
-    .catch((err) => console.log(`Error in Registration: ${err}`));
-
-    if(err){
-      console.log(err);
-    }
-  });
-});
-
-
-
-app.listen(3000, function() {
-  console.log("Server started on port 3000.");
-});
