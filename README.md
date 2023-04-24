@@ -130,14 +130,66 @@ app.route('/logout')
 	});
 ```  
 ---
+# Google OAuth2
+[OAuth][7] `npm install passport-google-oauth2`  
+[findOrCreate][8]: `npm install mongoose-findorcreate`  
+[Google OAuth Console](https://console.cloud.google.com/apis/)  
+Then  
+```js
+const findOrCreate = require('mongoose-findorcreate');
+// Define googleSchema
+googleSchema.plugin(findOrCreate);
+```  
+- [Passport Google OAuth2][7]  
+- [YT - NodeJS & Express - Google OAuth2 using PassportJS](https://www.youtube.com/watch?v=Q0a0594tOrc)  
+- [YT - Login with Google using Node JS | Google Authentication | Google OAuth using PassportJS](https://www.youtube.com/watch?v=YZPnam8Y8r4)  
+
+**auth.js** *basic Structure*
+```js
+var GoogleStrategy = require( 'passport-google-oauth2' ).Strategy;
+
+passport.use(new GoogleStrategy({
+  clientID:     GOOGLE_CLIENT_ID,
+  clientSecret: GOOGLE_CLIENT_SECRET,
+  callbackURL: "http://yourdomain:3000/auth/google/callback",
+  passReqToCallback   : true
+  },
+  function(request, accessToken, refreshToken, profile, done) {
+    GoogleUser.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return done(err, user);
+    });
+  }
+));
+```  
+**Then in app.js**  
+```js
+// Google OAuth endpoint: Transfer request to Google for Google account login
+app.get("/auth/google",
+	passport.authenticate('google', {scope: ['email', 'profile']}));
+// Google Callback endpoint: The one we defined in [google console > Credentials > 'OAuth 2.0 Client IDs']
+app.get('/google/callback', 
+	passport.authenticate('google', {
+		successRedirect: '/secrets',
+		failureRedirect: '/auth/failure'
+	})
+);
+// Auth Failure Endpoint
+app.get('/auth/failure', (req, res) => {
+	res.send('Something Went Wrong...');
+});
+```  
+
+---
 # References
 
-- [passport][1]  
-- [passport-local][2]  
-- [express-session][3]  
-- [GFG Reference][4]  
-- [Medium Article][5]  
-- [Udemy Solution QNA][6]
+1. [passport][1]  
+1. [passport-local][2]  
+1. [express-session][3]  
+1. [GFG Reference][4]  
+1. [Medium Article][5]  
+1. [Udemy Solution QNA][6]
+1. [Passport Google OAuth][7]
+1. [mongoose-findorcreate][8]
 
   
 [1]:https://www.npmjs.com/package/passport (passport)  
@@ -146,3 +198,5 @@ app.route('/logout')
 [4]:https://www.geeksforgeeks.org/node-js-authentication-using-passportjs-and-passport-local-mongoose/ (GFG Reference)  
 [5]:https://cambass.medium.com/jwt-authentication-with-node-express-passport-and-mongodb-445a7fca5893 (Medium Article)
 [6]:https://www.udemy.com/course/the-complete-web-development-bootcamp/learn/lecture/13559534#questions/19397914 (Udemy Solution QNA)
+[7]:https://www.passportjs.org/packages/passport-google-oauth2/ (passport google OAuth)
+[8]:https://www.npmjs.com/package/mongoose-findorcreate (mongoose-findorcreate)

@@ -14,3 +14,10 @@ body {
   color: #fff;
   background-color: #000;
 }
+
+.secrets-link{
+  color:black;
+}
+.secrets-link:hower{
+  color: blue;
+}

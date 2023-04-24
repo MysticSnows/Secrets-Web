@@ -1,19 +1,20 @@
-require('dotenv').config()
-const express = require('express')
-const ejs = require('ejs')
-const bodyParser = require('body-parser')
-const mongoose = require('mongoose')
-const bcrypt = require('bcrypt')
+require('dotenv').config();
+const express = require('express');
+require('ejs');
+require(__dirname + "/custom_modules/auth.js");		// Google Auth
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const saltRounds = 10;
-const session = require('express-session')
-const passport = require('passport')
+const session = require('express-session');
+const passport = require('passport');
 const LocalStrategy = require("passport-local").Strategy;
 
 //init app & middleware
-const app = express()
-app.use(express.static('public'))
-app.set('view engine', 'ejs')
-app.use(bodyParser.urlencoded({ extended: true }))
+const app = express();
+app.use(express.static('public'));
+app.set('view engine', 'ejs');
+app.use(bodyParser.urlencoded({ extended: true }));
 const User = require(__dirname + "/custom_modules/userModel.js");
 
 app.use(session({
@@ -47,7 +48,7 @@ passport.use(new LocalStrategy(
 			})
 			.catch((err) => {
 				return done(err);
-			})
+			});
 	}
 ));
 // Serialize
@@ -65,14 +66,14 @@ passport.deserializeUser((id, done) => {
 		});
 });
 
-//ROUTES----------------------------------------------------------------------------------------
-//HOME
+// ROUTES----------------------------------------------------------------------------------------
+// HOME
 app.route('/')
 	.get((req, res) => {
 		res.render('home');
-	})
+	});
 
-//REGISTER
+// REGISTER
 app.route('/register')
 	.get((req, res) => {
 		res.render('register')
@@ -85,19 +86,19 @@ app.route('/register')
 				const newUser = new User({
 					username: req.body.username,
 					password: hash
-				})
+				});
 				newUser.save()
 					.then(() => {
 						passport.authenticate('local', {
 							successRedirect: '/secrets',
 							failureRedirect: '/login'
 						})(req, res);
-					})
+					});
 			}
-		})
-	})
+		});
+	});
 
-//LOGIN
+// LOGIN
 app.route('/login')
 	.get((req, res) => {
 		res.render('login');
@@ -106,7 +107,7 @@ app.route('/login')
 		const user = new User({
 			username: req.body.useername,
 			password: req.body.password
-		})
+		});
 		req.login(user, (err) => {
 			if (err) {
 				console.log(err);
@@ -115,10 +116,10 @@ app.route('/login')
 					successRedirect: '/secrets'
 				})(req, res);
 			}
-		})
-	})
+		});
+	});
 
-//SECRETS
+// SECRETS
 app.route('/secrets')
 	.get((req, res) => {
 		// To prevent back button redirect after log out
@@ -128,21 +129,39 @@ app.route('/secrets')
 		} else {
 			res.redirect("/login");
 		}
-	})
+	});
 
-//LOGOUT
+// LOGOUT
 app.route('/logout')
 	.get((req, res) => {
-		req.logOut((err) => {
+		req.logOut(err => {
 			if (err) {
 				console.log(err);
 			} else {
+				req.session.destroy();
 				res.redirect('/');
 			}
 		});
 	});
 
-//listen to port 3000
+///////////////////					GOOGLE OAUTH AUTHENTICATION					///////////////////
+// Google OAuth endpoint: Transfer request to Google for Google account login
+app.get("/auth/google",
+	passport.authenticate('google', {scope: ['email', 'profile']}));
+// Google Callback endpoint: The one we defined in [google console > Credentials > 'OAuth 2.0 Client IDs']
+app.get('/google/callback', 
+	passport.authenticate('google', {
+		successRedirect: '/secrets',
+		failureRedirect: '/auth/failure'
+	})
+);
+// Auth Failure Endpoint
+app.get('/auth/failure', (req, res) => {
+	res.send('Something Went Wrong...');
+});
+///////////////////////////////////////////////////////////////////////////////////
+
+// listen to port 3000
 app.listen(3000, () => {
-	console.log('app listening on port 3000')
-})
+	console.log('app listening on port 3000');
+});
