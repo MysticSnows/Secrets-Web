@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 require('ejs');
+const async = require('async');
 require(__dirname + "/custom_modules/auth.js");		// Google Auth
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
@@ -16,6 +17,7 @@ app.use(express.static('public'));
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 const User = require(__dirname + "/custom_modules/userModel.js");
+const googleUser = require(__dirname + "/custom_modules/googleModel.js");
 
 app.use(session({
 	secret: process.env.SECRET_KEY,
@@ -122,13 +124,18 @@ app.route('/login')
 // SECRETS
 app.route('/secrets')
 	.get((req, res) => {
-		// To prevent back button redirect after log out
-		res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
-		if (req.isAuthenticated()) {
-			res.render("secrets");
-		} else {
-			res.redirect("/login");
-		}
+			User.find({"secret":{$ne:null}})
+			.then((docs1) => {
+				googleUser.find({"secret":{$ne:null}})
+				.then((docs2) => {
+					res.render('secrets', {
+						firstList: docs1,
+						secondList: docs2
+				});
+				})
+				.catch(err => console.log(err));
+			})
+			.catch(err => console.log(err));
 	});
 
 // LOGOUT
@@ -160,6 +167,46 @@ app.get('/auth/failure', (req, res) => {
 	res.send('Something Went Wrong...');
 });
 ///////////////////////////////////////////////////////////////////////////////////
+
+// Submit
+app.route("/submit")
+.get(function(req, res){
+	// To prevent back button redirect after log out
+	res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+	if(req.isAuthenticated()){
+		res.render("submit");
+	} else {
+		res.redirect("/login");
+	}
+})
+.post(function(req, res){
+	console.log(req.user);
+	User.findById(req.user)
+	.then(foundUser => {
+		if(foundUser) {
+			foundUser.secret = req.body.secret;
+			return foundUser.save();
+		}
+		return null;
+	})
+	.catch(err => {
+		console.log(err);
+	});
+
+	googleUser.findById(req.user)
+	.then(foundUser => {
+		if(foundUser) {
+			foundUser.secret = req.body.secret;
+			return foundUser.save();
+		}
+		return null;
+	})
+	.catch(err => {
+		console.log(err);
+	});
+
+	res.redirect("/secrets");
+})
 
 // listen to port 3000
 app.listen(3000, () => {
